@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 
-use crate::state::State;
+use crate::State;
 
 pub struct Task {
     state: &'static State,

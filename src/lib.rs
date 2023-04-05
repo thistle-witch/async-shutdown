@@ -2,17 +2,33 @@
 
 mod group;
 mod spawn;
-mod state;
 pub(crate) mod task;
 
+use core::sync::atomic::AtomicUsize;
+
+use futures_util::task::AtomicWaker;
 pub use group::TaskGroup;
 
 /// Future which completes once the associated task group has signaled a shutdown.
 pub struct ShutdownSignal;
 
+pub struct State {
+    running_tasks: AtomicUsize,
+    done_waker: AtomicWaker,
+}
+
+impl State {
+    pub const fn new() -> Self {
+        State {
+            running_tasks: AtomicUsize::new(0),
+            done_waker: AtomicWaker::new(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{*, state::State};
+    use crate::*;
 
     #[test]
     fn spawns_tasks() {

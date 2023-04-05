@@ -1,6 +1,6 @@
 use core::{future::Future, sync::atomic::Ordering, task::Poll};
 
-use crate::{spawn::Spawn, state::State, ShutdownSignal, task::Task};
+use crate::{spawn::Spawn, task::Task, ShutdownSignal, State};
 
 /// A group of potentially related tasks. Tasks spawned by this struct can be waited on or signaled to shut down.
 pub struct TaskGroup<S: Spawn> {
