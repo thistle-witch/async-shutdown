@@ -4,3 +4,15 @@ version = "0.1.0"
 authors = ["þistle <thistle-witch@protonmail.com"]
 license = "AGPL-3.0-only"
 edition = "2021"
+
+[features]
+default = ["std"]
+std = []
+tokio = ["std", "dep:tokio"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }
+async-shutdown = { path = ".", features = ["std", "tokio"]}
