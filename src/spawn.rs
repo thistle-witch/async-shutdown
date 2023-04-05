@@ -6,8 +6,7 @@ pub trait Spawn {
 
 #[cfg(feature = "tokio")]
 impl Spawn for &tokio::runtime::Runtime {
-    fn spawn(&self, future: impl Future<Output = ()> + Send + 'static)
-    {
+    fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
         tokio::runtime::Runtime::spawn(self, future);
     }
 }

@@ -12,6 +12,7 @@ tokio = ["std", "dep:tokio"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"], optional = true }
+futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["full"] }
