@@ -2,6 +2,7 @@
 
 mod group;
 mod spawn;
+pub(crate) mod intrusive;
 pub(crate) mod task;
 
 use core::sync::atomic::AtomicUsize;
