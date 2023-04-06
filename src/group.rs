@@ -1,6 +1,13 @@
-use core::{future::Future, sync::atomic::Ordering, task::Poll};
+use core::{
+    future::Future,
+    pin::Pin,
+    sync::atomic::Ordering,
+    task::{Poll, Waker},
+};
 
-use crate::{spawn::Spawn, task::Task, ShutdownSignal, State};
+use pin_project_lite::pin_project;
+
+use crate::{intrusive::Node, spawn::Spawn, task::Task, State};
 
 /// A group of potentially related tasks. Tasks spawned by this struct can be waited on or signaled to shut down.
 pub struct TaskGroup<S: Spawn> {
@@ -15,8 +22,23 @@ impl<S: Spawn> TaskGroup<S> {
     }
 
     /// Signal a shutdown to all tasks in this group and wait for shutdown to finish.
-    pub async fn shutdown() {
-        todo!()
+    pub async fn shutdown(&self) {
+        critical_section::with(|cs| {
+            self.state.shutdown_signaled.store(true, Ordering::SeqCst);
+
+            let list = self.state.shutdown_wakers.borrow(cs).borrow_mut();
+
+            let mut node = list.peek_front();
+            while let Some(inner_node) = node {
+                if let Some(ref waker) = inner_node.data {
+                    waker.clone().wake();
+                }
+
+                node = inner_node.next();
+            }
+        });
+
+        self.done().await;
     }
 
     /// Wait for all tasks in this group to finish without explicitly sending a shutdown signal.
@@ -37,7 +59,11 @@ impl<S: Spawn> TaskGroup<S> {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        let future = f(ShutdownSignal);
+        let signal = ShutdownSignal {
+            state: self.state,
+            node: Node::new(None),
+        };
+        let future = f(signal);
         self.spawn(future);
     }
 }
@@ -59,6 +85,56 @@ impl Future for DoneFuture {
             Poll::Ready(())
         } else {
             Poll::Pending
+        }
+    }
+}
+
+pin_project! {
+    /// Future which completes once the associated task group has signaled a shutdown.
+    pub struct ShutdownSignal {
+        state: &'static State,
+        #[pin]
+        node: Node<Option<Waker>>,
+    }
+
+    impl PinnedDrop for ShutdownSignal {
+        fn drop(this: Pin<&mut Self>) {
+            let this = this.project();
+
+            critical_section::with(|cs| {
+                let mut list = this.state.shutdown_wakers.borrow(cs).borrow_mut();
+                if this.node.is_init() {
+                    unsafe {this.node.remove(&mut list) };
+                }
+            });
+        }
+    }
+}
+
+impl Future for ShutdownSignal {
+    type Output = ();
+
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
+        let mut this = self.project();
+        unsafe {
+            critical_section::with(|cs| {
+                if this.state.shutdown_signaled.load(Ordering::SeqCst) {
+                    return Poll::Ready(());
+                }
+                let node = Pin::as_mut(&mut this.node).get_unchecked_mut();
+                node.data = Some(cx.waker().clone());
+                if !node.is_init() {
+                    this.state
+                        .shutdown_wakers
+                        .borrow(cs)
+                        .borrow_mut()
+                        .push_front(this.node);
+                }
+                return Poll::Pending;
+            })
         }
     }
 }

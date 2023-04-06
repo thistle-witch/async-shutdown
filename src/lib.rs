@@ -1,21 +1,26 @@
 #![no_std]
 
 mod group;
-mod spawn;
 pub(crate) mod intrusive;
+mod spawn;
 pub(crate) mod task;
 
-use core::sync::atomic::AtomicUsize;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, AtomicUsize},
+    task::Waker,
+};
 
+use critical_section::Mutex;
 use futures_util::task::AtomicWaker;
 pub use group::TaskGroup;
-
-/// Future which completes once the associated task group has signaled a shutdown.
-pub struct ShutdownSignal;
+use intrusive::List;
 
 pub struct State {
     running_tasks: AtomicUsize,
     done_waker: AtomicWaker,
+    shutdown_wakers: Mutex<RefCell<List<Option<Waker>>>>,
+    shutdown_signaled: AtomicBool,
 }
 
 impl State {
@@ -23,6 +28,8 @@ impl State {
         State {
             running_tasks: AtomicUsize::new(0),
             done_waker: AtomicWaker::new(),
+            shutdown_wakers: Mutex::new(RefCell::new(List::new())),
+            shutdown_signaled: AtomicBool::new(false),
         }
     }
 }
@@ -94,6 +101,32 @@ mod tests {
             tokio::select! {
                 _ = group.done() => {},
                 _ = tokio::time::sleep(core::time::Duration::from_secs(2)) => panic!()
+            }
+        });
+    }
+
+    #[test]
+    fn shutdown_signals() {
+        static STATE: State = State::new();
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let group = TaskGroup::with_spawner(&runtime, &STATE);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+
+        runtime.block_on(async move {
+            for _ in 0..5 {
+                let tx = tx.clone();
+                group.spawn_with_shutdown(|shutdown| async move {
+                    tokio::select! {
+                        _ = shutdown => {},
+                        _ = tokio::time::sleep(core::time::Duration::from_secs(5)) => {let _ = tx.send(());},
+                    }
+                    core::mem::drop(tx);});}
+            core::mem::drop(tx);
+            tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+            group.shutdown().await;
+            if let Some(_) = rx.recv().await {
+                panic!();
             }
         });
     }
