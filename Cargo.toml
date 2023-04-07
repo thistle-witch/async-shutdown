@@ -1,5 +1,5 @@
 [package]
-name = "async-shutdown"
+name = "simple-shutdown"
 version = "0.1.0"
 authors = ["þistle <thistle-witch@protonmail.com"]
 license = "AGPL-3.0-only"
@@ -19,4 +19,4 @@ critical-section = "1.1"
 
 [dev-dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
-async-shutdown = { path = ".", features = ["std", "tokio"]}
+simple-shutdown = { path = ".", features = ["std", "tokio"]}
