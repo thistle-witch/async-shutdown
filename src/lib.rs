@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, AtomicUsize},
@@ -45,7 +48,7 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_spawner(&runtime, &STATE);
+        let group = TaskGroup::with_static(&runtime, &STATE);
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         runtime.block_on(async move {
@@ -70,7 +73,7 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_spawner(&runtime, &STATE);
+        let group = TaskGroup::with_static(&runtime, &STATE);
 
         runtime.block_on(async move {
             group.spawn(async move {
@@ -91,7 +94,7 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_spawner(&runtime, &STATE);
+        let group = TaskGroup::with_static(&runtime, &STATE);
 
         runtime.block_on(async move {
             for _ in 0..5 {
@@ -112,7 +115,7 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_spawner(&runtime, &STATE);
+        let group = TaskGroup::with_static(&runtime, &STATE);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
 
         runtime.block_on(async move {
