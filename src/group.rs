@@ -42,8 +42,8 @@ impl<S: Spawn> TaskGroup<S> {
     }
 
     /// Wait for all tasks in this group to finish without explicitly sending a shutdown signal.
-    pub fn done(&self) -> DoneFuture {
-        DoneFuture { state: self.state }
+    pub async fn done(&self) {
+        DoneFuture { state: self.state }.await
     }
 
     /// Spawn a task as part of this task group
@@ -68,7 +68,7 @@ impl<S: Spawn> TaskGroup<S> {
     }
 }
 
-pub struct DoneFuture {
+struct DoneFuture {
     state: &'static State,
 }
 

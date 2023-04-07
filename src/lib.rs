@@ -1,10 +1,5 @@
 #![no_std]
 
-mod group;
-pub(crate) mod intrusive;
-mod spawn;
-pub(crate) mod task;
-
 use core::{
     cell::RefCell,
     sync::atomic::{AtomicBool, AtomicUsize},
@@ -13,8 +8,15 @@ use core::{
 
 use critical_section::Mutex;
 use futures_util::task::AtomicWaker;
-pub use group::TaskGroup;
 use intrusive::List;
+
+mod group;
+mod intrusive;
+mod spawn;
+mod task;
+
+pub use group::{ShutdownSignal, TaskGroup};
+pub use spawn::Spawn;
 
 pub struct State {
     running_tasks: AtomicUsize,
