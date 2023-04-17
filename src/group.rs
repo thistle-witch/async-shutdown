@@ -11,33 +11,31 @@ use alloc::sync::Arc;
 
 use pin_project_lite::pin_project;
 
-use crate::{intrusive::Node, spawn::Spawn, task::Task, State};
+use crate::{intrusive::Node, task::Task, State};
 
-/// A group of potentially related tasks. Tasks spawned by this struct can be waited on or signaled to shut down.
-pub struct TaskGroup<S: Spawn, C: Deref<Target = State>> {
-    spawner: S,
-    state: C,
+/// A group of potentially related tasks. Tasks created by this struct can be waited on or signaled to shut down.
+pub struct TaskGroup<S: Deref<Target = State>> {
+    state: S,
 }
 
 #[cfg(feature = "alloc")]
-impl<S: Spawn> TaskGroup<S, Arc<State>> {
+impl TaskGroup<Arc<State>> {
     /// Create a new task group using the provided spawner
-    pub fn new(spawner: S) -> Self {
+    pub fn new() -> Self {
         TaskGroup {
-            spawner,
             state: Arc::new(State::new()),
         }
     }
 }
 
-impl<S: Spawn> TaskGroup<S, &'static State> {
+impl TaskGroup<&'static State> {
     /// Create a new task group using the provided spawner and state
-    pub fn with_static(spawner: S, state: &'static State) -> Self {
-        TaskGroup { spawner, state }
+    pub fn with_static(state: &'static State) -> Self {
+        TaskGroup { state }
     }
 }
 
-impl<S: Spawn, C: 'static + Deref<Target = State> + Clone + Send> TaskGroup<S, C> {
+impl<S: 'static + Deref<Target = State> + Clone + Send> TaskGroup<S> {
     /// Signal a shutdown to all tasks in this group and wait for shutdown to finish.
     pub async fn shutdown(&self) {
         critical_section::with(|cs| {
@@ -66,25 +64,26 @@ impl<S: Spawn, C: 'static + Deref<Target = State> + Clone + Send> TaskGroup<S, C
         .await
     }
 
-    /// Spawn a task as part of this task group
-    pub fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
-        let task = Task::new(self.state.clone());
-        self.spawner.spawn(async {
-            future.await;
-            core::mem::drop(task);
-        });
+    /// Create a task as part of this task group. The returned Task should be spawned or awaited.
+    pub fn create<F>(&self, future: F) -> Task<S, F>
+    where
+        F: Future,
+    {
+        let task = Task::new(self.state.clone(), future);
+
+        task
     }
 
-    pub fn spawn_with_shutdown<F>(&self, f: impl FnOnce(ShutdownSignal<C>) -> F)
+    pub fn create_with_shutdown<F>(&self, f: impl FnOnce(ShutdownSignal<S>) -> F) -> Task<S, F>
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future,
     {
         let signal = ShutdownSignal {
             state: self.state.clone(),
             node: Node::new(None),
         };
         let future = f(signal);
-        self.spawn(future);
+        self.create(future)
     }
 }
 

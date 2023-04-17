@@ -15,11 +15,10 @@ use intrusive::List;
 
 mod group;
 mod intrusive;
-mod spawn;
 mod task;
 
 pub use group::{ShutdownSignal, TaskGroup};
-pub use spawn::Spawn;
+pub use task::Task;
 
 pub struct State {
     running_tasks: AtomicUsize,
@@ -48,15 +47,16 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_static(&runtime, &STATE);
+        let group = TaskGroup::with_static(&STATE);
         let (tx, rx) = tokio::sync::oneshot::channel();
 
-        runtime.block_on(async move {
-            group.spawn(async move {
+        runtime.block_on(async {
+            let task = group.create(async move {
                 if let Err(_) = tx.send(()) {
                     panic!("the receiver dropped");
                 }
             });
+            runtime.spawn(task);
 
             tokio::select! {
                 result = rx => match result {
@@ -73,14 +73,15 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_static(&runtime, &STATE);
+        let group = TaskGroup::with_static(&STATE);
 
-        runtime.block_on(async move {
-            group.spawn(async move {
+        runtime.block_on(async {
+            let task = group.create(async move {
                 loop {
                     tokio::time::sleep(core::time::Duration::from_millis(100)).await;
                 }
             });
+            runtime.spawn(task);
 
             tokio::select! {
                 _ = group.done() => panic!(),
@@ -94,13 +95,14 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_static(&runtime, &STATE);
+        let group = TaskGroup::with_static(&STATE);
 
-        runtime.block_on(async move {
+        runtime.block_on(async {
             for _ in 0..5 {
-                group.spawn(async move {
+                let task = group.create(async move {
                     tokio::time::sleep(core::time::Duration::from_millis(100)).await;
                 });
+                runtime.spawn(task);
             }
 
             tokio::select! {
@@ -115,18 +117,24 @@ mod tests {
         static STATE: State = State::new();
 
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        let group = TaskGroup::with_static(&runtime, &STATE);
+        let group = TaskGroup::with_static(&STATE);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
 
-        runtime.block_on(async move {
+        runtime.block_on(async {
             for _ in 0..5 {
                 let tx = tx.clone();
-                group.spawn_with_shutdown(|shutdown| async move {
+                let task = group.create_with_shutdown(|shutdown| async move {
                     tokio::select! {
                         _ = shutdown => {},
-                        _ = tokio::time::sleep(core::time::Duration::from_secs(5)) => {let _ = tx.send(());},
+                        _ = tokio::time::sleep(core::time::Duration::from_secs(5)) => {
+                            let _ = tx.send(());
+                        },
                     }
-                    core::mem::drop(tx);});}
+                    core::mem::drop(tx);
+                });
+                runtime.spawn(task);
+            }
+
             core::mem::drop(tx);
             tokio::time::sleep(core::time::Duration::from_secs(1)).await;
             group.shutdown().await;

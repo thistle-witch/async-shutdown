@@ -11,14 +11,12 @@ edition = "2021"
 default = ["std"]
 alloc = []
 std = ["critical-section/std", "alloc"]
-tokio = ["std", "dep:tokio"]
 
 [dependencies]
-tokio = { version = "1.0", default-features = false, features = ["rt"], optional = true }
 futures-util = { version = "0.3", default-features = false }
 pin-project-lite = "0.2.7"
 critical-section = "1.1"
 
 [dev-dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
-simple-shutdown = { path = ".", features = ["std", "tokio"]}
+simple-shutdown = { path = ".", features = ["std"]}
